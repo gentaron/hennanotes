@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#07070c">
+<title>HENNA NOTES</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icons/icon-192.png">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="画像をアップロードして自由にスライド。下の一本線をカオスなノーツが流れるリズムゲーム付きビューア。">
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+<!-- ===== ライブラリ画面 ===== -->
+<div id="library" class="screen">
+  <header class="topbar">
+    <h1 class="logo">HENNA<span>NOTES</span></h1>
+    <div class="spacer"></div>
+    <button id="btnInstall" class="btn ghost hidden">インストール</button>
+    <button id="btnAdd" class="btn">＋ 画像</button>
+    <button id="btnPlay" class="btn primary">▶ スライド</button>
+  </header>
+
+  <input id="fileInput" type="file" accept="image/*" multiple hidden>
+
+  <div id="dropzone" class="dropzone">
+    <div class="dz-inner">
+      <div class="dz-icon">▦</div>
+      <p class="dz-title">画像をドロップ / タップして追加</p>
+      <p class="dz-sub">端末内（IndexedDB）に保存。オフラインでも見られる。</p>
+    </div>
+  </div>
+
+  <div id="grid" class="grid"></div>
+
+  <footer class="libfoot">
+    <span id="count" class="muted">0 枚</span>
+    <div class="spacer"></div>
+    <button id="btnClear" class="btn danger ghost">全部消す</button>
+  </footer>
+</div>
+
+<!-- ===== ビューア画面 ===== -->
+<div id="viewer" class="screen hidden">
+  <canvas id="fx"></canvas>
+
+  <div id="stage" class="stage">
+    <img id="backdrop" class="backdrop" alt="" aria-hidden="true">
+    <img id="slide" class="slide" alt="">
+    <img id="slidePrev" class="slide ghost" alt="">
+  </div>
+
+  <div id="vtop" class="vtop">
+    <button id="btnBack" class="chip">← 戻る</button>
+    <span id="pos" class="chip mono">1 / 1</span>
+    <div class="spacer"></div>
+    <button id="btnAuto" class="chip">自動 OFF</button>
+    <button id="btnGame" class="chip on">ノーツ ON</button>
+  </div>
+
+  <div id="hud" class="hud">
+    <div class="hud-score"><span id="score">0</span></div>
+    <div class="hud-combo"><span id="combo"></span></div>
+    <div id="chaosName" class="hud-chaos"></div>
+  </div>
+
+  <div id="judgeText" class="judge"></div>
+  <div id="eventBanner" class="eventban"></div>
+  <div id="hitzone" class="hitzone" aria-label="ノーツを叩く"></div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>
