@@ -1,8 +1,9 @@
 # HENNA NOTES
 
 画像をアップロードして自由にスライドできる PWA ビューア。
-閲覧中は画面下に judgement line が一本走り、その上をドットのノーツが流れてくる
-—— ただしパターンは数秒ごとに勝手に組み替わり、**制御できない**。
+閲覧中は画面下に judgement line が一本走り、その上をドットのノーツが右から左へ流れてくる。
+動き自体はまっすぐ一定速度。カオスなのは **ノーツとノーツの間隔** で、
+間隔の作り方が数秒ごとに勝手に入れ替わるので **制御できない**。
 
 ## 使い方
 
@@ -27,22 +28,51 @@
 | ノーツ ON/OFF | リズム表示の切り替え |
 | Esc / 戻る | ライブラリへ |
 
-判定は PERFECT / GREAT / GOOD / MISS。判定サークルとの距離だけで決まるので、
-ノーツが化け物じみた動きをしていても叩ける。
+判定は PERFECT / GREAT / GOOD / MISS。判定サークルとの距離で決まる。
 
 ## カオスの中身
 
-数秒ごとに「フェーズ」が丸ごと引き直され、さらにランダムな「イベント」が重なる。
+ノーツの動きは一切いじらない。**線の上を、右から左へ、一定速度でまっすぐ流れるだけ**。
+カオスなのは「次のノーツまでの間隔」。数秒ごとに間隔ジェネレータが丸ごと入れ替わるので、
+どんなリズムで来るかは事前に読めない。
 
-- **パターン** 14種: single / stream / chord / burst / stair / wave / cluster / rest / triplet / machinegun / rain / crescendo / mirror / scatter
-- **動き** 16種: straight / sine / zigzag / bounce / gravity / float / spiral / stutter / swell / drunk / pendulum / rocket / fall / orbit / elastic / snake
-- **形** 16種: dot / ring / square / diamond / triangle / star / cross / plus / hex / bar / twin / pixel / spark / hollow / arrow / blob
-- **線** 14種: solid / dashed / dotted / double / glow / wave / tilt / jitter / thick / hair / gradient / broken / pulse / ladder
-- **色** 12種: neon / ice / magma / toxic / candy / mono / rainbow / sunset / deep / vhs / gold / ghost
-- **イベント** 30種: GRAVITY FLIP / ZERO-G / HYPER / SLOW MOTION / SWARM / GIANT / TINY / MIRROR / GHOST / RAINBOW / MONOCHROME / STROBE / INVERT / TORNADO / SILENCE / AVALANCHE / ECHO / DOUBLE LINE / SNAKE LINE / DRUNK LINE / METEOR / BLOOM / GLITCH / REVERSE / SPLIT JUDGE / PENDULUM / FREEZE / SHATTER / DRIFT UP / HEARTBEAT
+ジェネレータ 30種:
 
-BPM・分割・速度・向き（→ / ← / ⇄）・密度・サイズ・トレイル・回転・判定点の位置と数まで
-毎回引き直すので、同じ譜面は二度と出てこない。現在の状態は画面右上に表示される。
+| | |
+|---|---|
+| STEADY | 一定間隔 |
+| BURST | 高速n連 → 長い休み |
+| ACCEL / BRAKE | だんだん詰まる / だんだん伸びる |
+| RANDOM | 完全ランダム |
+| LOGISTIC | ロジスティック写像による決定論的カオス |
+| EUCLID | ユークリッドリズム（n分割にk個を均等配分） |
+| SWING | 長短の跳ね |
+| POLYRHYTHM | 非整数比の2周期を重ねる |
+| STUTTER | 極短を数連 → 長 |
+| GAP | 一定＋突然の空白 |
+| CLUSTER | 密集した塊が不定期に来る |
+| WALK | 前の間隔からのランダムウォーク |
+| GOLDEN | 黄金比による無理数間隔（決して繰り返さない） |
+| FIBONACCI | 1,1,2,3,5,8,13 の比 |
+| BOUNCE | 弾むボール（等比で詰まって跳ね直す） |
+| PRIME | 素数の並びを間隔に |
+| PALINDROME | ランダム列を順再生 → 逆再生 |
+| MORSE | 短長のビット列 |
+| HEARTBEAT | 短・長の心拍 |
+| MACHINEGUN | 0.05秒前後で撃ち続ける |
+| SILENCE | 長い沈黙のあと再開 |
+| SINE MOD | 間隔がサインで伸縮 |
+| RATCHET | 1小節を毎回違う分割数で刻む |
+| HALF/DOUBLE | 突然の倍速 / 半速 |
+| TRIPLET | 3連 → 溜め |
+| BINARY | ビットマスクの立ったところだけ鳴る |
+| AVALANCHE | 加速し続けて雪崩れる |
+| DRUNK | 基準からぐらつく |
+| FREEZE | 数秒止まってから連打 |
+
+直前の間隔が長かったノーツは自動で「アクセント」になり、大きく明るくリングつきで来る。
+現在のジェネレータ名は右上、派手なもの（BURST / MACHINEGUN / FREEZE など）は画面中央にも出る。
+配色（10種）と流れる速度もフェーズごとに緩く変わる。
 
 ## 構成
 

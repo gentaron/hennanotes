@@ -1,6 +1,7 @@
 // ============================================================
-//  HENNA NOTES - カオス・ノーツエンジン
-//  下の一本線をノーツが流れる。パターンは制御不能に変化し続ける。
+//  HENNA NOTES - ノーツエンジン
+//  ノーツは一本線の上を右から左へ、まっすぐ一定速度で流れるだけ。
+//  カオスなのは「間隔」。リズム生成器が数秒ごとに勝手に入れ替わる。
 // ============================================================
 
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -9,94 +10,236 @@ const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 const chance = p => Math.random() < p;
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 
-// ---- 変化のネタ帳 ------------------------------------------
-const SHAPES = ['dot', 'ring', 'square', 'diamond', 'triangle', 'star', 'cross', 'plus',
-  'hex', 'bar', 'twin', 'pixel', 'spark', 'hollow', 'arrow', 'blob'];
-
-const MOTIONS = ['straight', 'sine', 'zigzag', 'bounce', 'gravity', 'float', 'spiral',
-  'stutter', 'swell', 'drunk', 'pendulum', 'rocket', 'fall', 'orbit', 'elastic', 'snake'];
-
-const PATTERNS = ['single', 'stream', 'chord', 'burst', 'stair', 'wave', 'cluster',
-  'rest', 'triplet', 'machinegun', 'rain', 'crescendo', 'mirror', 'scatter'];
-
-const LINES = ['solid', 'dashed', 'dotted', 'double', 'glow', 'wave', 'tilt', 'jitter',
-  'thick', 'hair', 'gradient', 'broken', 'pulse', 'ladder'];
-
-const PALETTES = ['neon', 'ice', 'magma', 'toxic', 'candy', 'mono', 'rainbow', 'sunset',
-  'deep', 'vhs', 'gold', 'ghost'];
-
-const EVENTS = [
-  { k: 'GRAVITY FLIP', d: [4, 9], f: e => { e.gravity = -1.6; } },
-  { k: 'ZERO-G', d: [5, 11], f: e => { e.zeroG = 1; e.speedMul *= .55; } },
-  { k: 'HYPER', d: [3, 7], f: e => { e.speedMul *= 2.1; e.densityMul *= 1.5; } },
-  { k: 'SLOW MOTION', d: [4, 9], f: e => { e.speedMul *= .42; } },
-  { k: 'SWARM', d: [3, 6], f: e => { e.densityMul *= 3.4; e.sizeMul *= .6; } },
-  { k: 'GIANT', d: [3, 7], f: e => { e.sizeMul *= 2.6; e.densityMul *= .5; } },
-  { k: 'TINY', d: [4, 8], f: e => { e.sizeMul *= .45; e.densityMul *= 1.8; } },
-  { k: 'MIRROR', d: [4, 10], f: e => { e.mirror = 1; } },
-  { k: 'GHOST', d: [4, 9], f: e => { e.ghost = 1; } },
-  { k: 'RAINBOW', d: [5, 12], f: e => { e.rainbow = 1; } },
-  { k: 'MONOCHROME', d: [5, 11], f: e => { e.mono = 1; } },
-  { k: 'STROBE', d: [2, 5], f: e => { e.strobe = 1; } },
-  { k: 'INVERT', d: [2, 5], f: e => { e.invert = 1; } },
-  { k: 'TORNADO', d: [4, 9], f: e => { e.tornado = 1; } },
-  { k: 'SILENCE', d: [2, 4], f: e => { e.densityMul *= .12; } },
-  { k: 'AVALANCHE', d: [2, 5], f: e => { e.densityMul *= 5; e.speedMul *= 1.35; e.sizeMul *= .7; } },
-  { k: 'ECHO', d: [4, 9], f: e => { e.echo = 1; } },
-  { k: 'DOUBLE LINE', d: [5, 11], f: e => { e.extraLines = 2; } },
-  { k: 'SNAKE LINE', d: [5, 10], f: e => { e.lineWave = 26; e.lineFreq = 2.6; } },
-  { k: 'DRUNK LINE', d: [4, 9], f: e => { e.lineTilt = rnd(-.14, .14); e.lineWave = 12; } },
-  { k: 'METEOR', d: [3, 7], f: e => { e.meteor = 1; e.sizeMul *= 1.5; e.speedMul *= 1.5; } },
-  { k: 'BLOOM', d: [4, 9], f: e => { e.bloom = 1; } },
-  { k: 'GLITCH', d: [2, 6], f: e => { e.glitch = 1; } },
-  { k: 'REVERSE', d: [3, 8], f: e => { e.reverse = 1; } },
-  { k: 'SPLIT JUDGE', d: [5, 11], f: e => { e.judges = 3; } },
-  { k: 'PENDULUM', d: [4, 9], f: e => { e.judgeSwing = 1; } },
-  { k: 'FREEZE', d: [1.2, 2.6], f: e => { e.speedMul *= .06; } },
-  { k: 'SHATTER', d: [3, 7], f: e => { e.shatter = 1; } },
-  { k: 'DRIFT UP', d: [4, 9], f: e => { e.gravity = -.6; e.zeroG = .5; } },
-  { k: 'HEARTBEAT', d: [5, 10], f: e => { e.heartbeat = 1; } }
+// ---- 間隔ジェネレータ ---------------------------------------
+// make() は「次のノーツまでの秒数」を返す関数を作る。
+// wild:true のものは画面中央にバナーで名前が出る。
+const GENS = [
+  {
+    k: 'STEADY', make: () => { const b = rnd(.18, .7); return () => b; }
+  },
+  {
+    k: 'BURST', wild: true, make: () => {
+      const fast = rnd(.05, .1), gap = rnd(.7, 2.0), n = rndi(3, 9);
+      let i = 0; return () => (++i % n === 0) ? gap : fast;
+    }
+  },
+  {
+    k: 'ACCEL', make: () => {
+      let d = rnd(.5, .95); const r = rnd(.8, .93);
+      return () => (d = Math.max(.05, d * r));
+    }
+  },
+  {
+    k: 'BRAKE', make: () => {
+      let d = rnd(.05, .12); const r = rnd(1.08, 1.3);
+      return () => (d = Math.min(1.8, d * r));
+    }
+  },
+  {
+    k: 'RANDOM', make: () => () => rnd(.06, .95)
+  },
+  {
+    k: 'LOGISTIC', wild: true, make: () => {
+      let x = rnd(.2, .8); const r = rnd(3.72, 3.99), lo = rnd(.05, .1), hi = rnd(.5, 1.1);
+      return () => { x = r * x * (1 - x); return lo + x * (hi - lo); };
+    }
+  },
+  {
+    k: 'EUCLID', make: () => {
+      const n = rndi(5, 16), k = rndi(2, Math.max(3, n - 2)), u = rnd(.09, .2);
+      const seq = []; let prev = -1;
+      for (let i = 0; i < n; i++) {
+        const cur = Math.floor(i * k / n);
+        if (cur !== prev) { seq.push(i); prev = cur; }
+      }
+      let i = 0;
+      return () => {
+        const a = seq[i % seq.length];
+        const b = seq[(i + 1) % seq.length] + (i + 1 >= seq.length ? n : 0);
+        i++; return (b - a) * u;
+      };
+    }
+  },
+  {
+    k: 'SWING', make: () => {
+      const b = rnd(.16, .42), s = rnd(.25, .62); let up = false;
+      return () => { up = !up; return up ? b * (1 + s) : b * (1 - s); };
+    }
+  },
+  {
+    k: 'POLYRHYTHM', wild: true, make: () => {
+      const p1 = rnd(.2, .5), p2 = p1 * pick([2 / 3, 3 / 4, 3 / 5, 4 / 5, 5 / 7, 7 / 8]);
+      let cur = 0, t1 = p1, t2 = p2;
+      return () => {
+        const nt = Math.min(t1, t2), d = nt - cur; cur = nt;
+        if (t1 <= cur + 1e-6) t1 += p1;
+        if (t2 <= cur + 1e-6) t2 += p2;
+        return d;
+      };
+    }
+  },
+  {
+    k: 'STUTTER', make: () => {
+      const fast = rnd(.045, .085), long = rnd(.4, 1.1), n = rndi(3, 6);
+      let i = 0; return () => (++i % n === 0) ? long : fast;
+    }
+  },
+  {
+    k: 'GAP', wild: true, make: () => {
+      const b = rnd(.18, .4); return () => chance(.18) ? rnd(1.2, 3.2) : b;
+    }
+  },
+  {
+    k: 'CLUSTER', make: () => {
+      let left = 0; const tight = rnd(.05, .09);
+      return () => {
+        if (left > 0) { left--; return tight; }
+        left = rndi(2, 7); return rnd(.7, 2.2);
+      };
+    }
+  },
+  {
+    k: 'WALK', make: () => {
+      let d = rnd(.2, .5);
+      return () => (d = clamp(d * rnd(.65, 1.5), .05, 1.6));
+    }
+  },
+  {
+    k: 'GOLDEN', make: () => {
+      const b = rnd(.12, .3); let i = 0;
+      return () => { i++; return b * (1 + ((i * 0.6180339887) % 1) * 2.2); };
+    }
+  },
+  {
+    k: 'FIBONACCI', make: () => {
+      const u = rnd(.06, .13), f = [1, 1, 2, 3, 5, 8, 13];
+      let i = 0; return () => u * f[i++ % f.length];
+    }
+  },
+  {
+    k: 'BOUNCE', wild: true, make: () => {
+      let d = rnd(.5, .9); const r = rnd(.62, .8), floor = rnd(.045, .07);
+      return () => { d *= r; if (d < floor) d = rnd(.5, .9); return d; };
+    }
+  },
+  {
+    k: 'PRIME', make: () => {
+      const u = rnd(.04, .09), p = [2, 3, 5, 7, 11, 13, 17, 19, 23];
+      let i = rndi(0, 4);
+      return () => u * p[i++ % p.length];
+    }
+  },
+  {
+    k: 'PALINDROME', make: () => {
+      const n = rndi(4, 7), seq = Array.from({ length: n }, () => rnd(.06, .8));
+      const full = seq.concat([...seq].reverse());
+      let i = 0; return () => full[i++ % full.length];
+    }
+  },
+  {
+    k: 'MORSE', make: () => {
+      const s = rnd(.07, .13), l = s * rnd(3, 5);
+      const bits = Array.from({ length: rndi(5, 11) }, () => chance(.5));
+      let i = 0; return () => bits[i++ % bits.length] ? l : s;
+    }
+  },
+  {
+    k: 'HEARTBEAT', make: () => {
+      const s = rnd(.1, .18), l = rnd(.7, 1.3); let up = false;
+      return () => { up = !up; return up ? s : l; };
+    }
+  },
+  {
+    k: 'MACHINEGUN', wild: true, make: () => { const b = rnd(.045, .075); return () => b; }
+  },
+  {
+    k: 'SILENCE', wild: true, make: () => {
+      let first = true;
+      return () => { if (first) { first = false; return rnd(1.6, 3.6); } return rnd(.3, .8); };
+    }
+  },
+  {
+    k: 'SINE MOD', make: () => {
+      const b = rnd(.15, .4), f = rnd(.25, .9), a = rnd(.4, .85);
+      let i = 0; return () => b * (1 + Math.sin(i++ * f) * a);
+    }
+  },
+  {
+    k: 'RATCHET', make: () => {
+      const bar = rnd(.5, .9); let left = 0, sub = .1;
+      return () => {
+        if (left > 0) { left--; return sub; }
+        const div = rndi(1, 8); sub = bar / div; left = div - 1; return sub;
+      };
+    }
+  },
+  {
+    k: 'HALF/DOUBLE', wild: true, make: () => {
+      let b = rnd(.14, .4); let i = 0;
+      return () => { if (++i % rndi(4, 9) === 0) b = clamp(b * (chance(.5) ? .5 : 2), .05, 1.4); return b; };
+    }
+  },
+  {
+    k: 'TRIPLET', make: () => {
+      const b = rnd(.24, .5); let i = 0;
+      return () => (++i % 4 === 0) ? b : b / 3;
+    }
+  },
+  {
+    k: 'BINARY', make: () => {
+      const u = rnd(.07, .14), mask = rndi(3, 255);
+      let i = 0, acc = 0;
+      return () => {
+        acc = 0;
+        do { acc += u; i++; } while (!((mask >> (i % 8)) & 1) && acc < u * 8);
+        return acc;
+      };
+    }
+  },
+  {
+    k: 'AVALANCHE', wild: true, make: () => {
+      let d = rnd(.35, .6);
+      return () => { d = Math.max(.04, d * .88); return d + rnd(-.01, .01); };
+    }
+  },
+  {
+    k: 'DRUNK', make: () => { const b = rnd(.16, .5); return () => b * rnd(.35, 1.9); }
+  },
+  {
+    k: 'FREEZE', wild: true, make: () => {
+      let n = 0; return () => (++n === 1 ? rnd(2.2, 4.2) : rnd(.06, .12));
+    }
+  }
 ];
 
-function paletteHue(p, seed, t) {
-  switch (p) {
-    case 'neon': return 180 + seed * 140;
-    case 'ice': return 185 + seed * 45;
-    case 'magma': return 5 + seed * 45;
-    case 'toxic': return 75 + seed * 55;
-    case 'candy': return 300 + seed * 60;
-    case 'mono': return 0;
-    case 'rainbow': return (t * 90 + seed * 360) % 360;
-    case 'sunset': return 340 + seed * 80;
-    case 'deep': return 230 + seed * 50;
-    case 'vhs': return chanceSeed(seed) ? 300 : 190;
-    case 'gold': return 38 + seed * 22;
-    case 'ghost': return 200 + seed * 20;
-    default: return seed * 360;
-  }
-}
-const chanceSeed = s => (s * 997 % 1) > .5;
+const PALETTES = [
+  { k: 'neon', h: 190, spread: 40 }, { k: 'ice', h: 200, spread: 25 },
+  { k: 'magma', h: 14, spread: 30 }, { k: 'toxic', h: 88, spread: 34 },
+  { k: 'candy', h: 322, spread: 40 }, { k: 'sunset', h: 350, spread: 45 },
+  { k: 'deep', h: 250, spread: 30 }, { k: 'gold', h: 44, spread: 18 },
+  { k: 'vhs', h: 300, spread: 60 }, { k: 'mono', h: 0, spread: 0 }
+];
 
 export class Rhythm {
   constructor(canvas, hooks = {}) {
     this.cv = canvas;
     this.ctx = canvas.getContext('2d');
-    this.hooks = hooks;              // {onJudge, onChaos, onEvent}
+    this.hooks = hooks;               // {onJudge, onChaos, onEvent}
     this.notes = [];
     this.parts = [];
     this.waves = [];
     this.t = 0;
     this.running = false;
     this.enabled = true;
-    this.score = 0;
-    this.combo = 0;
-    this.best = 0;
-    this.events = [];
-    this.beatAcc = 0;
+    this.score = 0; this.combo = 0; this.best = 0;
+    this.dir = -1;                    // 右 → 左（片側から片側へ、ずっと同じ向き）
+    this.speed = 340;                 // px/s（全ノーツ共通）
+    this.speedTarget = 340;
+    this.pal = pick(PALETTES);
+    this.nextIn = .6;
+    this.lastGap = .5;
     this.phaseLeft = 0;
-    this.eventCd = rnd(6, 14);
-    this.S = {};
-    this.reroll(true);
+    this.newPhase(true);
     this._resize = () => this.resize();
     window.addEventListener('resize', this._resize);
     window.addEventListener('orientationchange', this._resize);
@@ -117,71 +260,26 @@ export class Rhythm {
     this.cv.height = Math.round(h * dpr);
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.W = w; this.H = h;
-    this.lineY = h * 0.78;
+    this.lineY = Math.round(h * 0.79);
+    this.jx = Math.round(w * 0.24);   // 判定点
   }
 
-  // ---- カオス director -------------------------------------
-  reroll(first) {
-    const S = this.S;
-    S.bpm = rnd(72, 232);
-    S.div = pick([1, 1, 2, 2, 3, 4, 4, 6, 8]);
-    S.speed = rnd(150, 620);
-    S.dir = chance(.5) ? 1 : -1;
-    S.mixDir = chance(.22);
-    S.density = rnd(.35, 1);
-    S.swing = chance(.3) ? rnd(.1, .35) : 0;
-    S.shape = pick(SHAPES);
-    S.shapeMix = chance(.35);
-    S.motion = pick(MOTIONS);
-    S.motionMix = chance(.3);
-    S.amp = rnd(6, 62);
-    S.freq = rnd(.6, 5.5);
-    S.size = rnd(7, 20);
-    S.sizeVar = rnd(0, .8);
-    S.trail = chance(.45) ? rndi(4, 16) : 0;
-    S.spin = chance(.4) ? rnd(-6, 6) : 0;
-    S.pattern = pick(PATTERNS);
-    S.line = pick(LINES);
-    S.lineWave = chance(.35) ? rnd(3, 18) : 0;
-    S.lineFreq = rnd(.5, 3.4);
-    S.lineTilt = chance(.25) ? rnd(-.08, .08) : 0;
-    S.palette = pick(PALETTES);
-    S.judgeX = rnd(.2, .8);
-    S.judgeDrift = chance(.3) ? rnd(-.06, .06) : 0;
-    S.jitter = chance(.25) ? rnd(1, 5) : 0;
-    this.phaseLeft = rnd(2.6, 8);
-    if (!first && this.hooks.onChaos) this.hooks.onChaos(this.describe());
+  // ---- フェーズ（間隔の作り方が丸ごと入れ替わる） -----------
+  newPhase(first) {
+    const def = pick(GENS);
+    this.gen = def;
+    this.next = def.make();
+    this.phaseLeft = rnd(3, 9);
+    if (chance(.35)) this.speedTarget = rnd(230, 520);
+    if (chance(.3)) this.pal = pick(PALETTES);
+    if (!first) {
+      this.hooks.onChaos?.(this.describe());
+      if (def.wild) this.hooks.onEvent?.(def.k);
+    }
   }
 
   describe() {
-    const S = this.S;
-    const ev = this.events.map(e => e.k).join(' + ');
-    const base = `${S.pattern.toUpperCase()} / ${S.motion} / ${S.shape} / ${S.line} / ${S.palette} ` +
-      `${Math.round(S.bpm)}BPM ${S.mixDir ? '⇄' : S.dir > 0 ? '→' : '←'}`;
-    return ev ? `${base}  ✦ ${ev}` : base;
-  }
-
-  fireEvent() {
-    const def = pick(EVENTS);
-    const ev = { k: def.k, f: def.f, left: rnd(def.d[0], def.d[1]) };
-    this.events.push(ev);
-    if (this.events.length > 3) this.events.shift();
-    if (this.hooks.onEvent) this.hooks.onEvent(ev.k);
-    if (this.hooks.onChaos) this.hooks.onChaos(this.describe());
-  }
-
-  // 現在の実効パラメータ（イベント適用後）
-  effective() {
-    const e = {
-      speedMul: 1, densityMul: 1, sizeMul: 1, gravity: 0, zeroG: 0,
-      mirror: 0, ghost: 0, rainbow: 0, mono: 0, strobe: 0, invert: 0,
-      tornado: 0, echo: 0, extraLines: 0, lineWave: this.S.lineWave,
-      lineFreq: this.S.lineFreq, lineTilt: this.S.lineTilt, meteor: 0,
-      bloom: 0, glitch: 0, reverse: 0, judges: 1, judgeSwing: 0,
-      shatter: 0, heartbeat: 0
-    };
-    for (const ev of this.events) ev.f(e);
-    return e;
+    return `${this.gen.k} / ${this.pal.k}`;
   }
 
   // ---- ループ ---------------------------------------------
@@ -208,72 +306,46 @@ export class Rhythm {
 
   reset() {
     this.notes.length = 0; this.parts.length = 0; this.waves.length = 0;
-    this.score = 0; this.combo = 0; this.best = 0; this.events.length = 0;
+    this.score = 0; this.combo = 0; this.best = 0;
+    this.nextIn = .6;
+    this.newPhase(true);
     this.pushHud();
   }
 
   update(dt) {
     this.t += dt;
-    const S = this.S, E = this.effective();
-    this.E = E;
+    this.speed += (this.speedTarget - this.speed) * Math.min(1, dt * 1.2);
 
-    // director
     this.phaseLeft -= dt;
-    if (this.phaseLeft <= 0) this.reroll();
-    for (let i = this.events.length - 1; i >= 0; i--) {
-      this.events[i].left -= dt;
-      if (this.events[i].left <= 0) {
-        this.events.splice(i, 1);
-        if (this.hooks.onChaos) this.hooks.onChaos(this.describe());
-      }
-    }
-    this.eventCd -= dt;
-    if (this.eventCd <= 0) { this.fireEvent(); this.eventCd = rnd(5, 15); }
+    if (this.phaseLeft <= 0) this.newPhase();
 
-    // 判定点
-    let jx = (S.judgeX + Math.sin(this.t * .35) * S.judgeDrift * 4) * this.W;
-    if (E.judgeSwing) jx = this.W * (.5 + Math.sin(this.t * 1.1) * .3);
-    this.jx = clamp(jx, this.W * .12, this.W * .88);
-    this.judgeXs = E.judges > 1
-      ? Array.from({ length: E.judges }, (_, i) => this.W * (i + 1) / (E.judges + 1))
-      : [this.jx];
-
-    // ノーツ生成（拍で刻む）
+    // 生成：間隔だけがカオス
     if (this.enabled) {
-      const beat = 60 / S.bpm / S.div;
-      this.beatAcc += dt;
-      while (this.beatAcc >= beat) {
-        this.beatAcc -= beat;
-        this.spawnBeat(E);
+      this.nextIn -= dt;
+      let guard = 0;
+      while (this.nextIn <= 0 && guard++ < 12) {
+        this.spawn(this.lastGap);
+        const minGap = Math.max(.042, 22 / this.speed);
+        this.lastGap = clamp(this.next(), minGap, 6);
+        this.nextIn += this.lastGap;
       }
     }
 
-    // ノーツ更新
-    const gone = [];
+    // 移動：まっすぐ一定速度
+    const v = this.dir * this.speed;
     for (const n of this.notes) {
+      n.x += v * dt;
       n.age += dt;
-      const sp = n.speed * E.speedMul * (E.reverse ? -1 : 1);
-      n.x += n.dir * sp * dt;
-      n.spinA += n.spin * dt;
-      if (n.trail) {
-        n.tr.push([n.x, n.y]);
-        if (n.tr.length > n.trail) n.tr.shift();
+      if (!n.hit && !n.missed && (n.x - this.jx) * this.dir > 96) {
+        n.missed = true;
+        this.judge('MISS');
       }
-      // 判定通過チェック
-      if (!n.hit) {
-        const tgt = this.nearestJudge(n.x);
-        const passed = n.dir > 0 ? n.x - tgt > 92 : tgt - n.x > 92;
-        if (passed && !n.missed) { n.missed = true; this.judge('MISS', 0, n); }
-      }
-      if (n.x < -180 || n.x > this.W + 180 || n.age > 22) gone.push(n);
     }
-    if (gone.length) this.notes = this.notes.filter(n => !gone.includes(n));
+    this.notes = this.notes.filter(n => n.x > -80 && n.x < this.W + 80);
 
-    // パーティクル
     for (let i = this.parts.length - 1; i >= 0; i--) {
       const p = this.parts[i];
-      p.life -= dt;
-      p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 420 * dt;
+      p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 380 * dt;
       if (p.life <= 0) this.parts.splice(i, 1);
     }
     for (let i = this.waves.length - 1; i >= 0; i--) {
@@ -283,118 +355,20 @@ export class Rhythm {
     }
   }
 
-  nearestJudge(x) {
-    let best = this.judgeXs[0], bd = 1e9;
-    for (const j of this.judgeXs) {
-      const d = Math.abs(j - x);
-      if (d < bd) { bd = d; best = j; }
-    }
-    return best;
-  }
-
-  spawnBeat(E) {
-    const S = this.S;
-    const density = clamp(S.density * E.densityMul, 0, 6);
-    if (Math.random() > Math.min(density, 1) && density <= 1) return;
-    const reps = density > 1 ? Math.min(Math.round(density), 4) : 1;
-    for (let r = 0; r < reps; r++) {
-      const group = this.patternGroup(S.pattern);
-      for (const g of group) {
-        setTimeout(() => this.running && this.spawnNote(g), g.delay * 1000);
-      }
-    }
-  }
-
-  patternGroup(p) {
-    const g = [];
-    const push = (delay, o = {}) => g.push(Object.assign({ delay }, o));
-    switch (p) {
-      case 'single': push(0); break;
-      case 'stream': for (let i = 0; i < 4; i++) push(i * .07); break;
-      case 'chord': { const n = rndi(2, 4); for (let i = 0; i < n; i++) push(0, { yOff: (i - n / 2) * rnd(14, 30) }); break; }
-      case 'burst': { const n = rndi(4, 9); for (let i = 0; i < n; i++) push(i * .028, { sizeMul: rnd(.6, 1.5) }); break; }
-      case 'stair': for (let i = 0; i < 5; i++) push(i * .09, { yOff: (i - 2) * 18 }); break;
-      case 'wave': for (let i = 0; i < 6; i++) push(i * .06, { yOff: Math.sin(i * .9) * 34 }); break;
-      case 'cluster': { const n = rndi(3, 6); for (let i = 0; i < n; i++) push(rnd(0, .18), { yOff: rnd(-30, 30) }); break; }
-      case 'rest': if (chance(.3)) push(0); break;
-      case 'triplet': for (let i = 0; i < 3; i++) push(i * .055); break;
-      case 'machinegun': for (let i = 0; i < 10; i++) push(i * .022, { sizeMul: .7 }); break;
-      case 'rain': { const n = rndi(2, 5); for (let i = 0; i < n; i++) push(rnd(0, .3), { yOff: rnd(-46, 10), sizeMul: rnd(.5, 1.2) }); break; }
-      case 'crescendo': { const n = rndi(4, 8); for (let i = 0; i < n; i++) push(i * .05, { sizeMul: .5 + i * .2 }); break; }
-      case 'mirror': push(0, { forceDir: 1 }); push(0, { forceDir: -1 }); break;
-      case 'scatter': { const n = rndi(1, 7); for (let i = 0; i < n; i++) push(rnd(0, .45), { yOff: rnd(-50, 50), sizeMul: rnd(.4, 1.8) }); break; }
-      default: push(0);
-    }
-    return g;
-  }
-
-  spawnNote(o = {}) {
-    const S = this.S, E = this.E || this.effective();
-    if (this.notes.length > 260) return;
-    let dir = o.forceDir || (S.mixDir ? (chance(.5) ? 1 : -1) : S.dir);
-    if (E.mirror && chance(.5)) dir *= -1;
+  // 直前の間隔が長いほど「アクセント」＝大きく明るい粒になる
+  spawn(gap) {
+    if (this.notes.length > 200) return;
+    const accent = gap > .45;
     const seed = Math.random();
-    const size = S.size * (1 + rnd(-S.sizeVar, S.sizeVar)) * (o.sizeMul || 1) * E.sizeMul;
-    const n = {
-      x: dir > 0 ? -50 : this.W + 50,
-      yOff: (o.yOff || 0),
-      speed: S.speed * rnd(.9, 1.12),
-      dir, size: clamp(size, 3, 90),
-      shape: S.shapeMix ? pick(SHAPES) : S.shape,
-      motion: S.motionMix ? pick(MOTIONS) : S.motion,
-      amp: S.amp * rnd(.6, 1.4),
-      freq: S.freq * rnd(.7, 1.3),
-      phase: rnd(0, Math.PI * 2),
-      spin: S.spin, spinA: rnd(0, 6.28),
-      trail: S.trail, tr: [],
-      seed, age: 0, hit: false, missed: false,
-      hue: paletteHue(S.palette, seed, this.t),
-      sat: S.palette === 'mono' ? 0 : rnd(70, 100),
-      lig: S.palette === 'ghost' ? 88 : rnd(55, 72)
-    };
-    n.y = this.noteY(n, 0);
-    this.notes.push(n);
-  }
-
-  // 線の高さ（うねり込み）
-  lineAt(x) {
-    const E = this.E || this.effective();
-    let y = this.lineY + (x - this.W / 2) * (E.lineTilt || 0);
-    if (E.lineWave) y += Math.sin(x * .012 * (E.lineFreq || 1) + this.t * 2.2) * E.lineWave;
-    if (this.S.line === 'jitter') y += (Math.random() - .5) * 3;
-    return y;
-  }
-
-  noteY(n, dt) {
-    const E = this.E || this.effective();
-    const base = this.lineAt(n.x) + n.yOff;
-    const a = n.amp, ph = this.t * n.freq + n.phase;
-    let off = 0;
-    switch (n.motion) {
-      case 'straight': off = 0; break;
-      case 'sine': off = Math.sin(ph) * a; break;
-      case 'zigzag': off = (Math.abs((ph / Math.PI) % 2 - 1) * 2 - 1) * a; break;
-      case 'bounce': off = -Math.abs(Math.sin(ph)) * a; break;
-      case 'gravity': off = -a + (n.age * n.age * 130) % (a * 2.4); break;
-      case 'float': off = -Math.abs(Math.sin(ph * .5)) * a * .8 - n.age * 6; break;
-      case 'spiral': off = Math.sin(ph) * a * Math.cos(ph * .33); break;
-      case 'stutter': off = Math.round(Math.sin(ph) * 3) / 3 * a; break;
-      case 'swell': off = Math.sin(ph) * a * (0.3 + 0.7 * Math.abs(Math.sin(this.t * .7))); break;
-      case 'drunk': off = Math.sin(ph) * a * .6 + Math.sin(ph * 2.7 + 1) * a * .4; break;
-      case 'pendulum': off = Math.sin(ph) * a * Math.exp(-n.age * .12); break;
-      case 'rocket': off = -n.age * n.age * 42; break;
-      case 'fall': off = n.age * n.age * 42 - a; break;
-      case 'orbit': off = Math.sin(ph) * a; break;
-      case 'elastic': off = Math.sin(ph) * a / (1 + n.age * .6); break;
-      case 'snake': off = Math.sin(n.x * .02 + this.t * 2) * a; break;
-    }
-    if (E.gravity) off += E.gravity * n.age * n.age * 60;
-    if (E.zeroG) off += Math.sin(n.age * 1.2 + n.seed * 6) * 26 * E.zeroG;
-    if (E.tornado) off += Math.sin(n.x * .03 + this.t * 4) * 40;
-    if (E.heartbeat) off *= 1 + Math.sin(this.t * 6) * .4;
-    if (this.S.jitter) off += (Math.random() - .5) * this.S.jitter * 3;
-    const lim = this.H * .42;
-    return base + clamp(off, -lim, lim);
+    this.notes.push({
+      x: this.dir < 0 ? this.W + 30 : -30,
+      size: (accent ? rnd(9, 12) : rnd(5.5, 7.5)),
+      accent,
+      hue: Math.round((this.pal.h + (seed - .5) * this.pal.spread) / 6) * 6,
+      sat: this.pal.k === 'mono' ? 0 : 92,
+      lig: accent ? 74 : 64,
+      age: 0, hit: false, missed: false
+    });
   }
 
   // ---- 判定 ------------------------------------------------
@@ -403,12 +377,11 @@ export class Rhythm {
     let target = null, bd = 1e9;
     for (const n of this.notes) {
       if (n.hit || n.missed) continue;
-      const d = Math.abs(n.x - this.nearestJudge(n.x));
+      const d = Math.abs(n.x - this.jx);
       if (d < bd) { bd = d; target = n; }
     }
-    const jx = target ? this.nearestJudge(target.x) : this.jx;
-    if (!target || bd > 96) {
-      this.waves.push({ x: jx, y: this.lineAt(jx), r: 4, sp: 170, life: .26, life0: .26, hue: 0, sat: 0 });
+    if (!target || bd > 100) {
+      this.waves.push({ x: this.jx, y: this.lineY, r: 6, sp: 150, life: .22, life0: .22, hue: 0, sat: 0 });
       return;
     }
     target.hit = true;
@@ -416,12 +389,12 @@ export class Rhythm {
     if (bd < 16) { label = 'PERFECT'; pts = 300; }
     else if (bd < 38) { label = 'GREAT'; pts = 180; }
     else { label = 'GOOD'; pts = 80; }
-    this.judge(label, pts, target);
+    this.judge(label, pts);
     this.burst(target);
   }
 
-  judge(label, pts, n) {
-    if (label === 'MISS') { this.combo = 0; }
+  judge(label, pts = 0) {
+    if (label === 'MISS') this.combo = 0;
     else {
       this.combo++;
       this.best = Math.max(this.best, this.combo);
@@ -431,71 +404,108 @@ export class Rhythm {
   }
 
   pushHud(label) {
-    if (this.hooks.onJudge) {
-      this.hooks.onJudge({ label, score: this.score, combo: this.combo, best: this.best });
-    }
+    this.hooks.onJudge?.({ label, score: this.score, combo: this.combo, best: this.best });
   }
 
   burst(n) {
-    const y = this.noteY(n, 0);
-    this.waves.push({ x: n.x, y, r: n.size, sp: 260, life: .38, life0: .38, hue: n.hue, sat: n.sat });
-    const cnt = rndi(6, 16);
+    this.waves.push({ x: n.x, y: this.lineY, r: n.size, sp: 230, life: .36, life0: .36, hue: n.hue, sat: n.sat });
+    const cnt = n.accent ? rndi(12, 20) : rndi(6, 12);
     for (let i = 0; i < cnt; i++) {
-      const a = rnd(0, Math.PI * 2), sp = rnd(60, 340);
+      const a = rnd(0, Math.PI * 2), sp = rnd(60, 320);
       this.parts.push({
-        x: n.x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60,
-        life: rnd(.25, .7), size: rnd(1.5, 4.5), hue: n.hue, sat: n.sat
+        x: n.x, y: this.lineY, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 70,
+        life: rnd(.25, .65), size: rnd(1.4, 3.6), hue: n.hue, sat: n.sat
       });
     }
   }
 
+  // 光の粒はキャンバスに焼いて使い回す（shadowBlur より軽い）
+  sprite(hue, sat, lig) {
+    this._sp = this._sp || new Map();
+    const key = hue + '_' + sat + '_' + lig;
+    let s = this._sp.get(key);
+    if (s) return s;
+    const R = 48;
+    s = document.createElement('canvas');
+    s.width = s.height = R * 2;
+    const c = s.getContext('2d');
+    const g = c.createRadialGradient(R, R, 0, R, R, R);
+    g.addColorStop(0, `hsla(${hue} ${sat}% ${Math.min(96, lig + 26)}% / 1)`);
+    g.addColorStop(.28, `hsla(${hue} ${sat}% ${lig}% / .9)`);
+    g.addColorStop(.55, `hsla(${hue} ${sat}% ${lig}% / .28)`);
+    g.addColorStop(1, `hsla(${hue} ${sat}% ${lig}% / 0)`);
+    c.fillStyle = g;
+    c.fillRect(0, 0, R * 2, R * 2);
+    if (this._sp.size > 160) this._sp.clear();
+    this._sp.set(key, s);
+    return s;
+  }
+
   // ---- 描画 ------------------------------------------------
   draw() {
-    const c = this.ctx, W = this.W, H = this.H, S = this.S, E = this.E || this.effective();
+    const c = this.ctx, W = this.W, H = this.H, y = this.lineY;
     c.clearRect(0, 0, W, H);
     if (!this.enabled) return;
 
-    // 下部を少し暗くしてノーツを見やすく
-    const g = c.createLinearGradient(0, H * .58, 0, H);
+    // 下側を少し落として見やすく
+    const g = c.createLinearGradient(0, H * .6, 0, H);
     g.addColorStop(0, 'rgba(0,0,0,0)');
-    g.addColorStop(1, 'rgba(0,0,0,.62)');
+    g.addColorStop(1, 'rgba(0,0,0,.6)');
     c.fillStyle = g;
-    c.fillRect(0, H * .58, W, H * .42);
+    c.fillRect(0, H * .6, W, H * .4);
 
-    if (E.strobe && Math.sin(this.t * 26) > .4) {
-      c.fillStyle = 'rgba(255,255,255,.10)'; c.fillRect(0, 0, W, H);
-    }
-    if (E.invert) {
-      c.save(); c.globalCompositeOperation = 'difference';
-      c.fillStyle = '#fff'; c.fillRect(0, 0, W, H); c.restore();
-    }
+    const base = `hsl(${this.pal.h} ${this.pal.k === 'mono' ? 0 : 85}% 70%)`;
 
-    this.drawLines(c, E);
-    this.drawJudges(c, E);
-
+    // 一本線
     c.save();
-    if (E.bloom) c.globalCompositeOperation = 'lighter';
+    c.strokeStyle = base;
+    c.shadowColor = base; c.shadowBlur = 12;
+    c.globalAlpha = .85; c.lineWidth = 1.6;
+    c.beginPath(); c.moveTo(0, y); c.lineTo(W, y); c.stroke();
+    c.restore();
+
+    // 判定点
+    c.save();
+    c.strokeStyle = base; c.shadowColor = base; c.shadowBlur = 16; c.lineWidth = 2;
+    c.beginPath(); c.arc(this.jx, y, 15, 0, 6.2832); c.stroke();
+    c.globalAlpha = .35;
+    c.beginPath(); c.moveTo(this.jx, y - 26); c.lineTo(this.jx, y + 26); c.stroke();
+    c.restore();
+
+    // ノーツ（線の上をまっすぐ流れる）
+    c.save();
+    c.globalCompositeOperation = 'lighter';
     for (const n of this.notes) {
-      const y = this.noteY(n, 0);
-      n.y = y;
-      if (n.trail && n.tr.length > 1) this.drawTrail(c, n);
-      if (E.echo) this.drawNote(c, n, n.x - n.dir * 34, y, .28, 1.1);
-      if (E.meteor) this.drawNote(c, n, n.x - n.dir * 18, y - 6, .4, .8);
-      const alpha = n.hit ? 0 : (E.ghost ? .35 + Math.sin(this.t * 5 + n.seed * 9) * .3 : 1);
-      if (alpha > .02) this.drawNote(c, n, n.x, y, alpha, 1);
+      if (n.hit) continue;
+      const sp = this.sprite(n.hue, n.sat, n.lig);
+      // 進行方向の後ろに引く尾
+      for (let i = 3; i >= 1; i--) {
+        const r = n.size * (2.6 - i * .5);
+        c.globalAlpha = .12 * (4 - i);
+        const tx = n.x - this.dir * n.size * 1.15 * i;
+        c.drawImage(sp, tx - r, y - r, r * 2, r * 2);
+      }
+      const r = n.size * 2.8;
+      c.globalAlpha = 1;
+      c.drawImage(sp, n.x - r, y - r, r * 2, r * 2);
+      if (n.accent) {
+        c.globalAlpha = .75;
+        c.strokeStyle = `hsl(${n.hue} ${n.sat}% ${n.lig}%)`;
+        c.lineWidth = 1.4;
+        c.beginPath(); c.arc(n.x, y, n.size * 2, 0, 6.2832); c.stroke();
+      }
     }
     c.restore();
 
-    // 波紋
     for (const w of this.waves) {
       c.save();
-      c.globalAlpha = clamp(w.life / w.life0, 0, 1) * .85;
-      c.strokeStyle = `hsl(${w.hue} ${w.sat}% 70%)`;
-      c.lineWidth = 2.5;
+      c.globalAlpha = clamp(w.life / w.life0, 0, 1) * .8;
+      c.strokeStyle = `hsl(${w.hue} ${w.sat}% 72%)`;
+      c.lineWidth = 2;
       c.beginPath(); c.arc(w.x, w.y, w.r, 0, 6.2832); c.stroke();
       c.restore();
     }
-    // 破片
+
     c.save();
     c.globalCompositeOperation = 'lighter';
     for (const p of this.parts) {
@@ -504,170 +514,5 @@ export class Rhythm {
       c.beginPath(); c.arc(p.x, p.y, p.size, 0, 6.2832); c.fill();
     }
     c.restore();
-
-    if (E.glitch) this.drawGlitch(c, W, H);
-  }
-
-  drawLines(c, E) {
-    const W = this.W, S = this.S;
-    const count = 1 + (E.extraLines || 0);
-    for (let li = 0; li < count; li++) {
-      const shift = li === 0 ? 0 : (li % 2 ? -34 : 34) * Math.ceil(li / 2);
-      const hue = paletteHue(S.palette, .5, this.t);
-      c.save();
-      c.globalAlpha = li === 0 ? .95 : .45;
-      c.strokeStyle = S.palette === 'mono' ? 'rgba(255,255,255,.85)' : `hsl(${hue} 90% 66%)`;
-      c.shadowColor = c.strokeStyle;
-      c.lineWidth = 2;
-      c.setLineDash([]);
-      switch (S.line) {
-        case 'dashed': c.setLineDash([16, 12]); break;
-        case 'dotted': c.setLineDash([2, 10]); c.lineCap = 'round'; break;
-        case 'thick': c.lineWidth = 6; break;
-        case 'hair': c.lineWidth = .8; break;
-        case 'glow': c.shadowBlur = 18; c.lineWidth = 3; break;
-        case 'pulse': c.lineWidth = 2 + Math.abs(Math.sin(this.t * (S.bpm / 60) * Math.PI)) * 5; break;
-        case 'broken': c.setLineDash([rnd(20, 70), rnd(8, 40)]); break;
-        case 'ladder': c.setLineDash([4, 4]); c.lineWidth = 3; break;
-      }
-      if (S.line === 'gradient') {
-        const gr = c.createLinearGradient(0, 0, W, 0);
-        gr.addColorStop(0, 'rgba(255,255,255,0)');
-        gr.addColorStop(.5, `hsl(${hue} 95% 70%)`);
-        gr.addColorStop(1, 'rgba(255,255,255,0)');
-        c.strokeStyle = gr;
-      }
-      c.beginPath();
-      for (let x = 0; x <= W; x += 6) {
-        const y = this.lineAt(x) + shift;
-        x === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
-      }
-      c.stroke();
-      if (S.line === 'double') {
-        c.beginPath();
-        for (let x = 0; x <= W; x += 6) {
-          const y = this.lineAt(x) + shift + 6;
-          x === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
-        }
-        c.stroke();
-      }
-      if (S.line === 'ladder') {
-        for (let x = 0; x <= W; x += 26) {
-          const y = this.lineAt(x) + shift;
-          c.beginPath(); c.moveTo(x, y - 7); c.lineTo(x, y + 7); c.stroke();
-        }
-      }
-      c.restore();
-    }
-  }
-
-  drawJudges(c, E) {
-    const S = this.S;
-    const pulse = 1 + Math.abs(Math.sin(this.t * (S.bpm / 60) * Math.PI)) * .28;
-    for (const jx of this.judgeXs) {
-      const jy = this.lineAt(jx);
-      const hue = paletteHue(S.palette, .8, this.t);
-      c.save();
-      c.strokeStyle = S.palette === 'mono' ? '#fff' : `hsl(${hue} 95% 72%)`;
-      c.shadowColor = c.strokeStyle; c.shadowBlur = 14;
-      c.lineWidth = 2;
-      c.beginPath(); c.arc(jx, jy, 17 * pulse, 0, 6.2832); c.stroke();
-      c.globalAlpha = .5;
-      c.beginPath(); c.arc(jx, jy, 26 * pulse, 0, 6.2832); c.stroke();
-      c.globalAlpha = 1;
-      c.beginPath(); c.moveTo(jx, jy - 30); c.lineTo(jx, jy + 30); c.stroke();
-      c.restore();
-    }
-  }
-
-  drawTrail(c, n) {
-    c.save();
-    c.globalCompositeOperation = 'lighter';
-    for (let i = 0; i < n.tr.length; i++) {
-      const p = n.tr[i], a = (i / n.tr.length) * .5;
-      c.globalAlpha = a;
-      c.fillStyle = `hsl(${n.hue} ${n.sat}% ${n.lig}%)`;
-      c.beginPath(); c.arc(p[0], p[1], n.size * .5 * (i / n.tr.length), 0, 6.2832); c.fill();
-    }
-    c.restore();
-  }
-
-  drawNote(c, n, x, y, alpha, scale) {
-    const s = n.size * scale;
-    const col = `hsl(${n.hue} ${n.sat}% ${n.lig}%)`;
-    c.save();
-    c.globalAlpha = alpha;
-    c.translate(x, y);
-    if (n.spin) c.rotate(n.spinA);
-    c.fillStyle = col; c.strokeStyle = col; c.lineWidth = Math.max(1.4, s * .22);
-    c.shadowColor = col; c.shadowBlur = s * .9;
-    const poly = (k, r, rot = 0) => {
-      c.beginPath();
-      for (let i = 0; i < k; i++) {
-        const a = rot + i * 6.2832 / k;
-        const px = Math.cos(a) * r, py = Math.sin(a) * r;
-        i === 0 ? c.moveTo(px, py) : c.lineTo(px, py);
-      }
-      c.closePath();
-    };
-    switch (n.shape) {
-      case 'dot': c.beginPath(); c.arc(0, 0, s, 0, 6.2832); c.fill(); break;
-      case 'ring': c.beginPath(); c.arc(0, 0, s, 0, 6.2832); c.stroke(); break;
-      case 'square': c.fillRect(-s, -s, s * 2, s * 2); break;
-      case 'hollow': c.strokeRect(-s, -s, s * 2, s * 2); break;
-      case 'diamond': poly(4, s * 1.3); c.fill(); break;
-      case 'triangle': poly(3, s * 1.3, -Math.PI / 2); c.fill(); break;
-      case 'hex': poly(6, s * 1.1); c.fill(); break;
-      case 'star':
-        c.beginPath();
-        for (let i = 0; i < 10; i++) {
-          const r = i % 2 ? s * .48 : s * 1.25, a = -Math.PI / 2 + i * Math.PI / 5;
-          const px = Math.cos(a) * r, py = Math.sin(a) * r;
-          i === 0 ? c.moveTo(px, py) : c.lineTo(px, py);
-        }
-        c.closePath(); c.fill(); break;
-      case 'cross':
-        c.beginPath(); c.moveTo(-s, -s); c.lineTo(s, s); c.moveTo(s, -s); c.lineTo(-s, s); c.stroke(); break;
-      case 'plus':
-        c.beginPath(); c.moveTo(0, -s * 1.2); c.lineTo(0, s * 1.2); c.moveTo(-s * 1.2, 0); c.lineTo(s * 1.2, 0); c.stroke(); break;
-      case 'bar': c.fillRect(-s * .35, -s * 1.5, s * .7, s * 3); break;
-      case 'twin':
-        c.beginPath(); c.arc(-s * .8, 0, s * .62, 0, 6.2832); c.fill();
-        c.beginPath(); c.arc(s * .8, 0, s * .62, 0, 6.2832); c.fill(); break;
-      case 'pixel':
-        c.fillRect(-s, -s, s, s); c.fillRect(0, 0, s, s); break;
-      case 'spark':
-        c.beginPath();
-        c.moveTo(0, -s * 1.6); c.lineTo(s * .42, -s * .42); c.lineTo(s * 1.6, 0);
-        c.lineTo(s * .42, s * .42); c.lineTo(0, s * 1.6); c.lineTo(-s * .42, s * .42);
-        c.lineTo(-s * 1.6, 0); c.lineTo(-s * .42, -s * .42); c.closePath(); c.fill(); break;
-      case 'arrow':
-        c.beginPath();
-        c.moveTo(s * 1.4 * n.dir, 0); c.lineTo(-s * .6 * n.dir, -s); c.lineTo(-s * .6 * n.dir, s);
-        c.closePath(); c.fill(); break;
-      case 'blob':
-        c.beginPath();
-        for (let i = 0; i <= 18; i++) {
-          const a = i / 18 * 6.2832;
-          const r = s * (1 + Math.sin(a * 3 + this.t * 3 + n.seed * 9) * .22);
-          const px = Math.cos(a) * r, py = Math.sin(a) * r;
-          i === 0 ? c.moveTo(px, py) : c.lineTo(px, py);
-        }
-        c.closePath(); c.fill(); break;
-      default: c.beginPath(); c.arc(0, 0, s, 0, 6.2832); c.fill();
-    }
-    c.restore();
-  }
-
-  drawGlitch(c, W, H) {
-    for (let i = 0; i < 4; i++) {
-      const y = rnd(H * .5, H);
-      const h = rnd(2, 14);
-      const dx = rnd(-26, 26);
-      try {
-        const img = c.getImageData(0, y, W, h);
-        c.putImageData(img, dx, y);
-      } catch (e) { /* ignore */ }
-    }
   }
 }
