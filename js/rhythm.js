@@ -233,11 +233,12 @@ export class Rhythm {
     this.enabled = true;
     this.score = 0; this.combo = 0; this.best = 0;
     this.dir = -1;                    // 右 → 左（片側から片側へ、ずっと同じ向き）
-    this.speed = 340;                 // px/s（全ノーツ共通）
-    this.speedTarget = 340;
+    this.speed = 110;                 // px/s（全ノーツ共通・ゆっくり）
+    this.speedTarget = 110;
+    this.gapScale = 3;                // 間隔の全体倍率
     this.pal = pick(PALETTES);
-    this.nextIn = .6;
-    this.lastGap = .5;
+    this.nextIn = 1.2;
+    this.lastGap = 1.2;
     this.phaseLeft = 0;
     this.newPhase(true);
     this._resize = () => this.resize();
@@ -270,7 +271,8 @@ export class Rhythm {
     this.gen = def;
     this.next = def.make();
     this.phaseLeft = rnd(3, 9);
-    if (chance(.35)) this.speedTarget = rnd(230, 520);
+    if (chance(.35)) this.speedTarget = rnd(70, 150);
+    this.gapScale = rnd(2.2, 4.2);
     if (chance(.3)) this.pal = pick(PALETTES);
     if (!first) {
       this.hooks.onChaos?.(this.describe());
@@ -307,7 +309,7 @@ export class Rhythm {
   reset() {
     this.notes.length = 0; this.parts.length = 0; this.waves.length = 0;
     this.score = 0; this.combo = 0; this.best = 0;
-    this.nextIn = .6;
+    this.nextIn = 1.2;
     this.newPhase(true);
     this.pushHud();
   }
@@ -325,8 +327,9 @@ export class Rhythm {
       let guard = 0;
       while (this.nextIn <= 0 && guard++ < 12) {
         this.spawn(this.lastGap);
-        const minGap = Math.max(.042, 22 / this.speed);
-        this.lastGap = clamp(this.next(), minGap, 6);
+        // 最低でも 88px は離す（ゆっくり流れるので詰まると団子になる）
+        const minGap = 88 / this.speed;
+        this.lastGap = clamp(this.next() * this.gapScale, minGap, 8);
         this.nextIn += this.lastGap;
       }
     }
@@ -358,7 +361,7 @@ export class Rhythm {
   // 直前の間隔が長いほど「アクセント」＝大きく明るい粒になる
   spawn(gap) {
     if (this.notes.length > 200) return;
-    const accent = gap > .45;
+    const accent = gap > 2;
     const seed = Math.random();
     this.notes.push({
       x: this.dir < 0 ? this.W + 30 : -30,
