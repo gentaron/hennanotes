@@ -220,6 +220,11 @@ const PALETTES = [
   { k: 'vhs', h: 300, spread: 60 }, { k: 'mono', h: 0, spread: 0 }
 ];
 
+// 画面上でノーツ同士を最低これだけ離す（px）
+const MIN_GAP_PX = 880;
+// 1フェーズの中で間隔が詰まっていくのは最大この倍率まで
+const MAX_ACCEL = 2;
+
 export class Rhythm {
   constructor(canvas, hooks = {}) {
     this.cv = canvas;
@@ -240,6 +245,8 @@ export class Rhythm {
     this.nextIn = 1.2;
     this.lastGap = 1.2;
     this.phaseLeft = 0;
+    this.phaseFirstGap = null;
+    this.phaseNotes = 0;
     this.newPhase(true);
     this._resize = () => this.resize();
     window.addEventListener('resize', this._resize);
@@ -270,7 +277,10 @@ export class Rhythm {
     const def = pick(GENS);
     this.gen = def;
     this.next = def.make();
-    this.phaseLeft = rnd(3, 9);
+    // 間隔が広いので、フェーズは時間ではなく「何個出したか」で切り替える
+    this.phaseNotes = rndi(3, 8);
+    this.phaseLeft = 90;
+    this.phaseFirstGap = null;
     if (chance(.35)) this.speedTarget = rnd(70, 150);
     this.gapScale = rnd(2.2, 4.2);
     if (chance(.3)) this.pal = pick(PALETTES);
@@ -319,7 +329,7 @@ export class Rhythm {
     this.speed += (this.speedTarget - this.speed) * Math.min(1, dt * 1.2);
 
     this.phaseLeft -= dt;
-    if (this.phaseLeft <= 0) this.newPhase();
+    if (this.phaseLeft <= 0 || this.phaseNotes <= 0) this.newPhase();
 
     // 生成：間隔だけがカオス
     if (this.enabled) {
@@ -327,9 +337,15 @@ export class Rhythm {
       let guard = 0;
       while (this.nextIn <= 0 && guard++ < 12) {
         this.spawn(this.lastGap);
-        // 最低でも 88px は離す（ゆっくり流れるので詰まると団子になる）
-        const minGap = 88 / this.speed;
-        this.lastGap = clamp(this.next() * this.gapScale, minGap, 8);
+        this.phaseNotes--;
+        // 下限（MIN_GAP_PX 相当の秒数）を土台に、ジェネレータの揺れを上乗せする。
+        // 単純にクランプすると大半が下限に張り付いて一定間隔になってしまう。
+        const floor = MIN_GAP_PX / this.speed;
+        let gap = floor + this.next() * this.gapScale;
+        if (this.phaseFirstGap === null) this.phaseFirstGap = gap;
+        // 詰まっていくのはフェーズ最初の間隔の 1/MAX_ACCEL まで
+        gap = Math.max(gap, this.phaseFirstGap / MAX_ACCEL);
+        this.lastGap = clamp(gap, floor, 40);
         this.nextIn += this.lastGap;
       }
     }
@@ -361,7 +377,7 @@ export class Rhythm {
   // 直前の間隔が長いほど「アクセント」＝大きく明るい粒になる
   spawn(gap) {
     if (this.notes.length > 200) return;
-    const accent = gap > 2;
+    const accent = gap > (MIN_GAP_PX / this.speed) * 1.45;
     const seed = Math.random();
     this.notes.push({
       x: this.dir < 0 ? this.W + 30 : -30,
