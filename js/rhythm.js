@@ -221,7 +221,7 @@ const PALETTES = [
 ];
 
 // 画面上でノーツ同士を最低これだけ離す（px）
-const MIN_GAP_PX = 880;
+const MIN_GAP_PX = 150;
 // 1フェーズの中で間隔が詰まっていくのは最大この倍率まで
 const MAX_ACCEL = 2;
 
@@ -381,7 +381,7 @@ export class Rhythm {
     const seed = Math.random();
     this.notes.push({
       x: this.dir < 0 ? this.W + 30 : -30,
-      size: (accent ? rnd(9, 12) : rnd(5.5, 7.5)),
+      size: (accent ? rnd(10, 12) : rnd(6.5, 8.5)),
       accent,
       hue: Math.round((this.pal.h + (seed - .5) * this.pal.spread) / 6) * 6,
       sat: this.pal.k === 'mono' ? 0 : 92,
@@ -438,28 +438,6 @@ export class Rhythm {
     }
   }
 
-  // 光の粒はキャンバスに焼いて使い回す（shadowBlur より軽い）
-  sprite(hue, sat, lig) {
-    this._sp = this._sp || new Map();
-    const key = hue + '_' + sat + '_' + lig;
-    let s = this._sp.get(key);
-    if (s) return s;
-    const R = 48;
-    s = document.createElement('canvas');
-    s.width = s.height = R * 2;
-    const c = s.getContext('2d');
-    const g = c.createRadialGradient(R, R, 0, R, R, R);
-    g.addColorStop(0, `hsla(${hue} ${sat}% ${Math.min(96, lig + 26)}% / 1)`);
-    g.addColorStop(.28, `hsla(${hue} ${sat}% ${lig}% / .9)`);
-    g.addColorStop(.55, `hsla(${hue} ${sat}% ${lig}% / .28)`);
-    g.addColorStop(1, `hsla(${hue} ${sat}% ${lig}% / 0)`);
-    c.fillStyle = g;
-    c.fillRect(0, 0, R * 2, R * 2);
-    if (this._sp.size > 160) this._sp.clear();
-    this._sp.set(key, s);
-    return s;
-  }
-
   // ---- 描画 ------------------------------------------------
   draw() {
     const c = this.ctx, W = this.W, H = this.H, y = this.lineY;
@@ -491,30 +469,12 @@ export class Rhythm {
     c.beginPath(); c.moveTo(this.jx, y - 26); c.lineTo(this.jx, y + 26); c.stroke();
     c.restore();
 
-    // ノーツ（線の上をまっすぐ流れる）
-    c.save();
-    c.globalCompositeOperation = 'lighter';
+    // ノーツ（線の上をまっすぐ流れる、ただの●）
     for (const n of this.notes) {
       if (n.hit) continue;
-      const sp = this.sprite(n.hue, n.sat, n.lig);
-      // 進行方向の後ろに引く尾
-      for (let i = 3; i >= 1; i--) {
-        const r = n.size * (2.6 - i * .5);
-        c.globalAlpha = .12 * (4 - i);
-        const tx = n.x - this.dir * n.size * 1.15 * i;
-        c.drawImage(sp, tx - r, y - r, r * 2, r * 2);
-      }
-      const r = n.size * 2.8;
-      c.globalAlpha = 1;
-      c.drawImage(sp, n.x - r, y - r, r * 2, r * 2);
-      if (n.accent) {
-        c.globalAlpha = .75;
-        c.strokeStyle = `hsl(${n.hue} ${n.sat}% ${n.lig}%)`;
-        c.lineWidth = 1.4;
-        c.beginPath(); c.arc(n.x, y, n.size * 2, 0, 6.2832); c.stroke();
-      }
+      c.fillStyle = `hsl(${n.hue} ${n.sat}% ${n.lig}%)`;
+      c.beginPath(); c.arc(n.x, y, n.size, 0, 6.2832); c.fill();
     }
-    c.restore();
 
     for (const w of this.waves) {
       c.save();
