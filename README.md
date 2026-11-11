@@ -102,3 +102,16 @@ icons/                  アイコン（tools/make_icons.py で生成）
 ```
 
 依存パッケージなし・ビルド不要。素の HTML/CSS/JS だけで動く。
+
+<!-- ecosystem:begin (自動生成: gentaron/infocollect の ecosystem/registry.json から。手で直さない) -->
+
+## つながり
+
+gentaron のリポジトリ群のうち **遊びと実験** の一つ。画像を自由にスライドできる PWA ビューア。
+
+- **同じ島**: [fpsgame](https://github.com/gentaron/fpsgame)、[1million](https://github.com/gentaron/1million)、[minagal](https://github.com/gentaron/minagal)、[game-of-mina](https://github.com/gentaron/game-of-mina)、[OCAI](https://github.com/gentaron/OCAI)
+- **前身**: [hentaigame](https://github.com/gentaron/hentaigame)
+
+全体の地図 → [ecosystem](https://github.com/gentaron/infocollect/blob/HEAD/ecosystem/README.md)
+
+<!-- ecosystem:end -->
