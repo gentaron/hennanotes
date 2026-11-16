@@ -1,5 +1,5 @@
 // アプリシェルをキャッシュしてオフラインでも起動できるようにする
-const CACHE = 'henna-notes-v1';
+const CACHE = 'henna-notes-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -7,7 +7,7 @@ const ASSETS = [
   './js/app.js',
   './js/store.js',
   './js/rhythm.js',
-  './manifest.webmanifest',
+  './manifest.webmanifest', "./icons/eureka/icon-192.png", "./icons/eureka/icon-512.png", "./icons/eureka/icon-maskable-192.png", "./icons/eureka/icon-maskable-512.png", "./icons/eureka/favicon.ico", "./icons/eureka/apple-touch-icon.png",
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable.png'
